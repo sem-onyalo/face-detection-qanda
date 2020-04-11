@@ -35,7 +35,7 @@ def getFaceTrackers(faces):
 def labelFaces(img, trackers):
     for tracker in trackers:
         cv.rectangle(img, tracker.rect.pt1.toTuple(), tracker.rect.pt2.toTuple(), (0, 0, 255), 4)
-        cv.circle(img, tracker.pt.toTuple(), 5, (0, 255, 255), -1)
+        cv.circle(img, tracker.pt.toTuple(), 4, (0, 255, 255), -1)
         break # just get first one
 
 def detectFaces(cap, faceClassifier):
@@ -45,75 +45,147 @@ def detectFaces(cap, faceClassifier):
     return img, faces, imgGray
     
 # function to get coordinates
-def get_coords(pt):
+def getOpticalFlowPtCoords(pt):
     if isinstance(pt, tuple):
         return int(pt[0][0][0][0]), int(pt[0][0][0][1])
     else:
         return int(pt[0][0][0]), int(pt[0][0][1])
 
+def addText(img, text, textColor=(238,238,238), textScale=1, textThickness=2, textPadding=[0,0,0,0]):
+    topPad = textPadding[0]
+    bottomPad = textPadding[2]
+    res = "640,480" # TODO pull from argparse.ArgumentParser()
+    font = cv.FONT_HERSHEY_SIMPLEX
+    textSize = cv.getTextSize(text, font, textScale, textThickness)
+    textWidth = textSize[0][0]
+    textHeight = textSize[0][1]
+    frameDim = list(map(int, res.split(',')))
+    xPos = int(round((frameDim[0] / 1 - textWidth) / 2))
+    yPos = 0
+    if topPad > 0:
+        yPos = topPad + textHeight
+    elif bottomPad > 0:
+        yPos = frameDim[1] - textHeight - bottomPad
+    cv.putText(img, text, (xPos, yPos), font, textScale, textColor, textThickness, cv.LINE_AA)
+
+def showQuestion(img, text):
+    padding = [20,0,0,0]
+    addText(img, text, (0,0,255), textPadding=padding)
+
+def showAnswer(img, text):
+    padding = [0,0,10,0]
+    addText(img, text, (0,0,255), textPadding=padding)
+
+def initApp(faces):
+    if len(faces) > 0:
+        trackers = getFaceTrackers(faces)
+        pt = trackers[0].pt.toCalcOpticalFlowPyrLKFeature()
+        return True, pt
+    else:
+        return False, None
+        
+def trackFaces(img, faces, imgGrayOld, imgGray, ptOld):
+    trackers = getFaceTrackers(faces)
+    labelFaces(img, trackers)
+    pt = cv.calcOpticalFlowPyrLK(imgGrayOld, imgGray, ptOld, None, **lk_params)
+    return pt
+
+def getAnswer(ptOld, pt, xMovementOld, yMovementOld, movementThreshold):
+    a,b = getOpticalFlowPtCoords(ptOld), getOpticalFlowPtCoords(pt)
+
+    xMovement = xMovementOld + abs(a[0]-b[0])
+    yMovement = yMovementOld + abs(a[1]-b[1])
+    
+    isAnswer = False
+    answer = None
+
+    if xMovement > movementThreshold:
+        isAnswer = True
+        answer = 'NO'
+
+    elif yMovement > movementThreshold:
+        isAnswer = True
+        answer = 'YES'
+
+    return isAnswer, answer, xMovement, yMovement
+
 lk_params = dict( winSize  = (15,15),
                   maxLevel = 2,
                   criteria = (cv.TERM_CRITERIA_EPS | cv.TERM_CRITERIA_COUNT, 10, 0.03))
+
+testQuestions = [
+    'Is this a cool app?',
+    'Was it difficult for you to build?',
+    'Does this app have the potential to be creepy?'
+]
 
 cap = cv.VideoCapture(0)
 faceClassifier = cv.CascadeClassifier('haarcascade_frontalface_alt.xml')
 
 # constants
-max_head_movement = 20
-movement_threshold = 50
-gesture_threshold = 75
-# vars
-gesture = False
-x_movement = 0
-y_movement = 0
-gesture_show = 60 # number of frames a gesture is shown
+movementThreshold = 175
+showQuestionMaxTime = 60
+showAnswerMaxTime = 60
+
 imgGray = None
 pt = None
-isFaceTrackerInit = False
 
-# do it
+# App states
+stateInit = 0
+stateShowQuestion = 1
+stateGetAnswer = 2
+stateShowAnswer = 3
+stateEnd = 4
+
+# Run vars
+questions = testQuestions
+currentState = stateInit
+showQuestionTime = 0
+showAnswerTime = 0
+questionIndex = 0
+answer = False
+xMovement = 0
+yMovement = 0
+
+# Run app
 while True:
-
-    if isFaceTrackerInit == False:
+    if currentState == stateInit:
         img, faces, imgGray = detectFaces(cap, faceClassifier)
+        isInit, pt = initApp(faces)
+        if isInit:
+            currentState = stateShowQuestion
+            showQuestionTime = showQuestionMaxTime
 
-        if len(faces) > 0:
-            trackers = getFaceTrackers(faces)
-            pt = trackers[0].pt.toCalcOpticalFlowPyrLKFeature()
-            isFaceTrackerInit = True
+    elif currentState == stateShowQuestion:
+        ret, img = cap.read()
+        showQuestion(img, questions[questionIndex])
+        showQuestionTime -= 1
+        if showQuestionTime == 0:
+            currentState = stateGetAnswer
+            showQuestionTime = showQuestionMaxTime
 
-    else:
+    elif currentState == stateGetAnswer:
         imgGrayOld = imgGray.copy()
         ptOld = pt[0]
-
         img, faces, imgGray = detectFaces(cap, faceClassifier)
 
-        trackers = getFaceTrackers(faces)
-        labelFaces(img, trackers)
+        pt = trackFaces(img, faces, imgGrayOld, imgGray, ptOld)
 
-        pt = cv.calcOpticalFlowPyrLK(imgGrayOld, imgGray, ptOld, None, **lk_params)
-        
-        a,b = get_coords(ptOld), get_coords(pt)
-        x_movement += abs(a[0]-b[0])
-        y_movement += abs(a[1]-b[1])
-        
-        text = 'x_movement: ' + str(x_movement)
-        if not gesture: cv.putText(img, text, (50,50 ), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
-        text = 'y_movement: ' + str(y_movement)
-        if not gesture: cv.putText(img, text, (50,100 ), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+        showQuestion(img, questions[questionIndex])
 
-        if x_movement > gesture_threshold:
-            gesture = 'No'
-        if y_movement > gesture_threshold:
-            gesture = 'Yes'
-        if gesture and gesture_show > 0:
-            cv.putText(img, 'Gesture Detected: ' + gesture, (50,50), cv.FONT_HERSHEY_SIMPLEX, 1.2, (0,0,255), 3)
-            gesture_show -= 1
-        if gesture_show == 0:
-            gesture = False
-            x_movement = 0
-            y_movement = 0
-            gesture_show = 60 # number of frames a gesture is shown
+        isAnswer, answer, xMovement, yMovement = getAnswer(ptOld, pt, xMovement, yMovement, movementThreshold)
+        
+        cv.putText(img, 'xMovement: ' + str(xMovement), (50,100), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+        cv.putText(img, 'yMovement: ' + str(yMovement), (50,150), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+
+        if isAnswer != False:
+            currentState = stateShowAnswer
+            showAnswerTime = showAnswerMaxTime
+
+    elif currentState == stateShowAnswer:
+        ret, img = cap.read()
+        showQuestion(img, questions[questionIndex])
+        showAnswer(img, answer)
        
     cv.imshow('image', img)
 
