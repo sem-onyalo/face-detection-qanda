@@ -51,30 +51,76 @@ def getOpticalFlowPtCoords(pt):
     else:
         return int(pt[0][0][0]), int(pt[0][0][1])
 
-def addText(img, text, textColor=(238,238,238), textScale=1, textThickness=2, textPadding=[0,0,0,0]):
-    topPad = textPadding[0]
-    bottomPad = textPadding[2]
-    res = "640,480" # TODO pull from argparse.ArgumentParser()
+def formatText(text, textFont, textScale, textThickness, frameDim, padding):
+    textObj = []
+    lineCount = 1
+    size = cv.getTextSize(text, textFont, textScale, textThickness)
+    width = size[0][0]
+    height = size[0][1]
+    while width > frameDim[0]:
+        lineCount += 1
+        splitPoint = text[:int(len(text)/lineCount)].rfind(' ')
+        splitText = text[:splitPoint]
+        size = cv.getTextSize(splitText, textFont, textScale, textThickness)
+        width = size[0][0]
+        height = size[0][1]
+
+    start = 0
+    end = int(len(text)/lineCount)
+    topPadding = padding[0]
+    bottomPadding = padding[2]
+    linePadding = 10
+    currentLine = 1
+    while True:
+        splitPoint = -1 if end >= len(text) else text[start:end].rfind(' ')
+        splitText = text[start:end][:splitPoint] if splitPoint > 0 else text[start:]
+        size = cv.getTextSize(splitText, textFont, textScale, textThickness)
+        width = size[0][0]
+        height = size[0][1]
+        xPos = int(round((frameDim[0] / 1 - width) / 2))
+
+        if topPadding > 0:
+            yPos = topPadding + height
+        elif bottomPadding > 0:
+            yPos = frameDim[1] - bottomPadding
+
+        textObj.append({ 'text': splitText, 'pt': (xPos,yPos) })
+        
+        if splitPoint < 0:
+            break
+
+        currentLine += 1
+        start = start + splitPoint + 1
+        end = currentLine * int(len(text)/lineCount)
+
+        if topPadding > 0:
+            topPadding += height + linePadding
+        elif bottomPadding > 0:
+            bottomPadding -= height - linePadding
+        
+        if currentLine >= 7: # arbitrary cutoff
+            break
+
+    return textObj
+
+def addText(img, text, frameDim, textColor=(238,238,238), textScale=1, textThickness=2, textPadding=[0,0,0,0]):
     font = cv.FONT_HERSHEY_SIMPLEX
     textSize = cv.getTextSize(text, font, textScale, textThickness)
     textWidth = textSize[0][0]
     textHeight = textSize[0][1]
-    frameDim = list(map(int, res.split(',')))
-    xPos = int(round((frameDim[0] / 1 - textWidth) / 2))
-    yPos = 0
-    if topPad > 0:
-        yPos = topPad + textHeight
-    elif bottomPad > 0:
-        yPos = frameDim[1] - textHeight - bottomPad
-    cv.putText(img, text, (xPos, yPos), font, textScale, textColor, textThickness, cv.LINE_AA)
+    textObjs = formatText(text, font, textScale, textThickness, frameDim, textPadding)
+    
+    for textObj in textObjs:
+        cv.putText(img, textObj['text'], textObj['pt'], 
+                   font, textScale, textColor, textThickness, cv.LINE_AA)
 
-def showQuestion(img, text):
+def showQuestion(img, text, frameDim):
     padding = [20,0,0,0]
-    addText(img, text, (0,0,255), textPadding=padding)
+    addText(img, text, frameDim, (0,0,255), textPadding=padding)
 
-def showAnswer(img, text):
-    padding = [0,0,10,0]
-    addText(img, text, (0,0,255), textPadding=padding)
+def showAnswer(img, text, frameDim):
+    padding = [0,0,20,0]
+    addText(img, text, frameDim, (0,0,255), textPadding=padding)
 
 def initApp(faces):
     if len(faces) > 0:
@@ -115,10 +161,12 @@ lk_params = dict( winSize  = (15,15),
 
 testQuestions = [
     'Is this a cool app?',
-    'Was it difficult for you to build?',
-    'Does this app have the potential to be creepy?'
+    'Was it difficult to build?',
+    'Should it be shared with others?'
 ]
 
+res = "640,480" # TODO pull from argparse.ArgumentParser()
+frameDim = list(map(int, res.split(',')))
 cap = cv.VideoCapture(0)
 faceClassifier = cv.CascadeClassifier('haarcascade_frontalface_alt.xml')
 
@@ -158,11 +206,12 @@ while True:
 
     elif currentState == stateShowQuestion:
         ret, img = cap.read()
-        showQuestion(img, questions[questionIndex])
+        showQuestion(img, questions[questionIndex], frameDim)
         showQuestionTime -= 1
         if showQuestionTime == 0:
             currentState = stateGetAnswer
-            showQuestionTime = showQuestionMaxTime
+            xMovement = 0
+            yMovement = 0
 
     elif currentState == stateGetAnswer:
         imgGrayOld = imgGray.copy()
@@ -171,12 +220,12 @@ while True:
 
         pt = trackFaces(img, faces, imgGrayOld, imgGray, ptOld)
 
-        showQuestion(img, questions[questionIndex])
+        showQuestion(img, questions[questionIndex], frameDim)
 
         isAnswer, answer, xMovement, yMovement = getAnswer(ptOld, pt, xMovement, yMovement, movementThreshold)
         
-        cv.putText(img, 'xMovement: ' + str(xMovement), (50,100), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
-        cv.putText(img, 'yMovement: ' + str(yMovement), (50,150), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+        cv.putText(img, 'xMovement: ' + str(xMovement), (50,frameDim[1] - 150), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+        cv.putText(img, 'yMovement: ' + str(yMovement), (50,frameDim[1] - 100), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
 
         if isAnswer != False:
             currentState = stateShowAnswer
@@ -184,10 +233,21 @@ while True:
 
     elif currentState == stateShowAnswer:
         ret, img = cap.read()
-        showQuestion(img, questions[questionIndex])
-        showAnswer(img, answer)
-       
-    cv.imshow('image', img)
+        showQuestion(img, questions[questionIndex], frameDim)
+        showAnswer(img, answer, frameDim)
+        showAnswerTime -= 1
+        if showAnswerTime == 0:
+            questionIndex += 1
+            if questionIndex < len(questions):
+                currentState = stateShowQuestion
+                showQuestionTime = showQuestionMaxTime
+            else:
+                currentState = stateEnd
+
+    elif currentState == stateEnd:
+        ret, img = cap.read()
+            
+    cv.imshow('Q&A', img)
 
     ch = cv.waitKey(1)
     if ch == 27:
