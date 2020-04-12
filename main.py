@@ -1,14 +1,21 @@
+import json
 import argparse
 import cv2 as cv
 from facetracker import FaceTracker
 from videomanager import VideoManager
 from qanda import App, stateInit, stateDebug
 
-testQuestions = [
-    'Is this a cool app?',
-    'Was it difficult to build?',
-    'Should it be shared with others?'
-]
+def getAppQuestions():
+    try:
+        with open('app.settings.json', 'r') as file:
+            settings = json.loads(file.read())
+            return settings['questions']
+    except:
+        return [
+            'Is this a cool app?',
+            'Was it difficult to build?',
+            'Should it be shared with others?'
+        ] # debugging sample questions
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -25,7 +32,9 @@ if __name__ == '__main__':
     faceTracker = FaceTracker(cap, faceClassifier)
     videoManager = VideoManager()
 
-    app = App(cap, faceTracker, videoManager, initState, testQuestions, frameDim)
+    appQuestions = getAppQuestions()
+
+    app = App(cap, faceTracker, videoManager, initState, appQuestions, frameDim)
 
     app.run()
  
