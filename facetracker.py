@@ -46,9 +46,9 @@ class FaceTracker:
         if len(detections) > 0:
             faces = self.getFaces(detections)
             self.pt = faces[0].pt.toCalcOpticalFlowPyrLKFeature()
-            return True, img, self.pt
+            return True, img
         else:
-            return False, img, None
+            return False, img
    
     def getFaces(self, detections):
         faces = []
@@ -66,7 +66,7 @@ class FaceTracker:
             break # just get first one
 
     def detectFaces(self):
-        ret, img = self.cap.read()
+        _, img = self.cap.read()
         imgGray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
         detections = self.faceClassifier.detectMultiScale(imgGray, 1.3, 5)
         return img, detections, imgGray
@@ -78,23 +78,7 @@ class FaceTracker:
         faces = self.getFaces(detections)
         self.labelFaces(img, faces)
         self.pt = cv.calcOpticalFlowPyrLK(imgGrayOld, self.imgGray, self.ptOld, None, **lk_params)
-        return img, self.pt
-
-    def getAnswer(self, xMovementOld, yMovementOld, movementThreshold):
         a,b = getOpticalFlowPtCoords(self.ptOld), getOpticalFlowPtCoords(self.pt)
-
-        xMovement = xMovementOld + abs(a[0]-b[0])
-        yMovement = yMovementOld + abs(a[1]-b[1])
-        
-        isAnswer = False
-        answer = None
-
-        if xMovement > movementThreshold:
-            isAnswer = True
-            answer = 'NO'
-
-        elif yMovement > movementThreshold:
-            isAnswer = True
-            answer = 'YES'
-
-        return isAnswer, answer, xMovement, yMovement
+        xDelta = abs(a[0]-b[0])
+        yDelta = abs(a[1]-b[1])
+        return img, xDelta, yDelta
