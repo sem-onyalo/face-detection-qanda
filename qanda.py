@@ -18,13 +18,14 @@ stateShowAnswer = 3
 stateEnd = 4
 
 class App:
-    def __init__(self, cap, faceTracker, videoManager, initState, questions, frameDimensions):
+    def __init__(self, cap, faceTracker, videoManager, initState, questions, frameDimensions, verbose=False):
         self.cap = cap
         self.questions = questions
         self.currentState = initState
         self.faceTracker = faceTracker
         self.videoManager = videoManager
         self.frameDimensions = frameDimensions
+        self.verbose = verbose
         
         self.currentQuestionIndex = 0
         self.showQuestionTime = 0
@@ -33,6 +34,7 @@ class App:
         self.yMovement = 0
         self.answer = None
 
+        self.faceTracker.showLabels = self.currentState == stateDebug and self.verbose
         self.debugShowAnswerTime = debugShowAnswerMaxTime
         self.isDebugInit = False
 
@@ -109,11 +111,12 @@ class App:
                         self.yMovement = 0
                         self.answer = None
 
-                    cv.putText(img, 'xMovement: ' + str(self.xMovement), (50, self.frameDimensions[1] - 150), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
-                    cv.putText(img, 'yMovement: ' + str(self.yMovement), (50, self.frameDimensions[1] - 100), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
-                    
-                    cv.putText(img, 'xDelta: ' + str(xDelta), (50, 100), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
-                    cv.putText(img, 'yDelta: ' + str(yDelta), (50, 150), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+                    if self.verbose:
+                        cv.putText(img, 'xMovement: ' + str(self.xMovement), (50, self.frameDimensions[1] - 150), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+                        cv.putText(img, 'yMovement: ' + str(self.yMovement), (50, self.frameDimensions[1] - 100), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+                        
+                        cv.putText(img, 'xDelta: ' + str(xDelta), (50, 100), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
+                        cv.putText(img, 'yDelta: ' + str(yDelta), (50, 150), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
         
             cv.imshow('Q&A with Face Detection', img)
 

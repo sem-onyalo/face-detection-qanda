@@ -20,21 +20,26 @@ def getAppQuestions():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--resol", type=str, default="640,480", help="The resolution of the video. Default is '640,480'")
-    parser.add_argument("-d", "--debug", help="Debug mode", action="store_true")
+    parser.add_argument("-m", "--mode", type=int, default=0, help="mode to run the app in")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose debugging")
     args = parser.parse_args()
 
     frameDim = list(map(int, args.resol.split(',')))
-    initState = stateDebug if args.debug else stateInit
 
     cap = cv.VideoCapture(0)
     faceClassifier = cv.CascadeClassifier('haarcascade_frontalface_alt.xml')
 
-    faceTracker = FaceTracker(cap, faceClassifier)
+    faceTracker = FaceTracker(cap, frameDim, faceClassifier)
     videoManager = VideoManager()
 
     appQuestions = getAppQuestions()
-
-    app = App(cap, faceTracker, videoManager, initState, appQuestions, frameDim)
-
-    app.run()
+    
+    if args.mode == 0: # regular
+        app = App(cap, faceTracker, videoManager, stateInit, appQuestions, frameDim)
+        app.run()
+    elif args.mode == 1: # debug app
+        app = App(cap, faceTracker, videoManager, stateDebug, appQuestions, frameDim, args.verbose)
+        app.run()
+    elif args.mode == 2: # debug face tracker
+        faceTracker.debug()
  
